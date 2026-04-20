@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Damas A 2 - Adriano Freitas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a5c4c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            background: #c49a6c;
+            padding: 20px;
+            border-radius: 20px;
+            text-align: center;
+        }
+        canvas {
+            border: 3px solid #8b691b;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #f0d9b5;
+        }
+        button {
+            margin: 10px 5px;
+            padding: 8px 20px;
+            font-size: 14px;
+            font-weight: bold;
+            background: #f3d382;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+        button.active {
+            background: #ffb347;
+            color: white;
+        }
+        .info {
+            margin-top: 15px;
+            padding: 10px;
+            background: #2c241a;
+            color: white;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .piece-demo {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #c73b2a;
+        }
+        .piece-demo.white {
+            background: #efe2c6;
+        }
+        .footer {
+            margin-top: 15px;
+            color: #f7e9c3;
+            font-size: 11px;
+        }
+        .message {
+            margin-top: 10px;
+            color: #ffecb3;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <canvas id="board" width="400" height="400"></canvas>
+    
+    <div>
+        <button id="btn2p" class="active">2 Jogadores</button>
+        <button id="btnAI">VS Robô</button>
+        <button id="btnReset">Novo Jogo</button>
+    </div>
+    
+    <div class="info">
+        <div class="piece-demo" id="demoPiece"></div>
+        <span id="turnText">Vez das Brancas</span>
+    </div>
+    <div class="message" id="message"></div>
+    <div class="footer">
+        Desenvolvido por Adriano Freitas | Dama move livremente | Captura múltipla | Peças capturam para trás
+    </div>
+</div>
+
+<script>
+    // Configuração
+    const TAMANHO = 8;
+    const CELULA = 50;
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    
+    // Tabuleiro
+    let tabuleiro = [];
+    let jogadorAtual = 'branco';
+    let fimJogo = false;
+    let linhaSelecionada = -1;
+    let colunaSelecionada = -1;
+    let movimentosValidos = [];
+    let modoJogo = '2p';
+    let aguardandoIA = false;
+    
+    // Inicializar tabuleiro
+    function iniciarTabuleiro() {
+        for(let i = 0; i < TAMANHO; i++) {
+            tabuleiro[i] = [];
+            for(let j = 0; j < TAMANHO; j++) {
+                tabuleiro[i][j] = 0;
+            }
+        }
+        
+        // Peças vermelhas (cima)
+        for(let i = 0; i < 3; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                if((i + j) % 2 === 1) {
+                    tabuleiro[i][j] = 3;
+                }
+            }
+        }
+        
+        // Peças brancas (baixo)
+        for(let i = 5; i < 8; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                if((i + j) % 2 === 1) {
+                    tabuleiro[i][j] = 1;
+                }
+            }
+        }
+    }
+    
+    // Verificar tipo
+    function ehBranco(p) { return p === 1 || p === 2; }
+    function ehVermelho(p) { return p === 3 || p === 4; }
+    function ehDama(p) { return p === 2 || p === 4; }
+    
+    // Obter capturas (MODIFICADO: peças normais capturam para frente E para trás)
+    function obterCapturas(lin, col) {
+        const peca = tabuleiro[lin][col];
+        if(peca === 0) return [];
+        const ehBranca = ehBranco(peca);
+        const capturas = [];
+        
+        if(ehDama(peca)) {
+            const dirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+            for(const [dr, dc] of dirs) {
+                let capturada = null;
+                for(let passo = 1; passo < TAMANHO; passo++) {
+                    const l = lin + dr * passo;
+                    const c = col + dc * passo;
+                    if(l < 0 || l >= TAMANHO || c < 0 || c >= TAMANHO) break;
+                    const p = tabuleiro[l][c];
+                    if(p !== 0 && capturada === null) {
+                        if((ehBranca && ehVermelho(p)) || (!ehBranca && ehBranco(p))) {
+                            capturada = {lin: l, col: c};
+                        } else break;
+                    }
+                    else if(p === 0 && capturada !== null) {
+                        capturas.push({paraLin: l, paraCol: c, capturaLin: capturada.lin, capturaCol: capturada.col, ehCaptura: true});
+                    }
+                    else if(p !== 0 && capturada !== null) break;
+                    else if(p !== 0 && capturada === null) break;
+                }
+            }
+        } else {
+            // PEÇA NORMAL - Agora captura em TODAS as 4 direções (frente e trás)
+            const dirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+            for(const [dr, dc] of dirs) {
+                const meioL = lin + dr;
+                const meioC = col + dc;
+                const destinoL = lin + dr * 2;
+                const destinoC = col + dc * 2;
+                if(destinoL >= 0 && destinoL < TAMANHO && destinoC >= 0 && destinoC < TAMANHO) {
+                    const pecaMeio = tabuleiro[meioL][meioC];
+                    const pecaDestino = tabuleiro[destinoL][destinoC];
+                    if(pecaMeio !== 0 && pecaDestino === 0) {
+                        if((ehBranca && ehVermelho(pecaMeio)) || (!ehBranca && ehBranco(pecaMeio))) {
+                            capturas.push({paraLin: destinoL, paraCol: destinoC, capturaLin: meioL, capturaCol: meioC, ehCaptura: true});
+                        }
+                    }
+                }
+            }
+        }
+        return capturas;
+    }
+    
+    // Obter movimentos simples (sem captura) - Peças normais só andam para frente
+    function obterMovimentosSimples(lin, col) {
+        const peca = tabuleiro[lin][col];
+        if(peca === 0) return [];
+        const ehBranca = ehBranco(peca);
+        const movimentos = [];
+        
+        if(ehDama(peca)) {
+            const dirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
+            for(const [dr, dc] of dirs) {
+                for(let passo = 1; passo < TAMANHO; passo++) {
+                    const l = lin + dr * passo;
+                    const c = col + dc * passo;
+                    if(l < 0 || l >= TAMANHO || c < 0 || c >= TAMANHO) break;
+                    if(tabuleiro[l][c] === 0) {
+                        movimentos.push({paraLin: l, paraCol: c, ehCaptura: false});
+                    } else break;
+                }
+            }
+        } else {
+            // Peça normal só anda para frente
+            const dirs = ehBranca ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
+            for(const [dr, dc] of dirs) {
+                const l = lin + dr;
+                const c = col + dc;
+                if(l >= 0 && l < TAMANHO && c >= 0 && c < TAMANHO && tabuleiro[l][c] === 0) {
+                    movimentos.push({paraLin: l, paraCol: c, ehCaptura: false});
+                }
+            }
+        }
+        return movimentos;
+    }
+    
+    // Verificar se tem captura obrigatória
+    function temCapturaObrigatoria(jogador) {
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                const p = tabuleiro[i][j];
+                if(p !== 0) {
+                    if((jogador === 'branco' && ehBranco(p)) || (jogador === 'vermelho' && ehVermelho(p))) {
+                        if(obterCapturas(i, j).length > 0) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Obter movimentos válidos
+    function obterMovimentosValidos(lin, col) {
+        if(temCapturaObrigatoria(jogadorAtual)) {
+            return obterCapturas(lin, col);
+        } else {
+            return obterMovimentosSimples(lin, col);
+        }
+    }
+    
+    // Verificar se o jogador tem movimentos disponíveis
+    function jogadorTemMovimentos(jogador) {
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                const p = tabuleiro[i][j];
+                if(p !== 0) {
+                    if((jogador === 'branco' && ehBranco(p)) || (jogador === 'vermelho' && ehVermelho(p))) {
+                        const guardarJogador = jogadorAtual;
+                        jogadorAtual = jogador;
+                        const movs = obterMovimentosValidos(i, j);
+                        jogadorAtual = guardarJogador;
+                        if(movs.length > 0) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+    
+    // Aplicar movimento
+    function aplicarMovimento(origemL, origemC, destinoL, destinoC, movimento) {
+        const peca = tabuleiro[origemL][origemC];
+        
+        // Move a peça
+        tabuleiro[destinoL][destinoC] = peca;
+        tabuleiro[origemL][origemC] = 0;
+        
+        // Só remove peça capturada se for um movimento de captura
+        if(movimento && movimento.ehCaptura === true) {
+            tabuleiro[movimento.capturaLin][movimento.capturaCol] = 0;
+        }
+        
+        // Promoção a Dama
+        if(peca === 1 && destinoL === 0) {
+            tabuleiro[destinoL][destinoC] = 2;
+        } else if(peca === 3 && destinoL === 7) {
+            tabuleiro[destinoL][destinoC] = 4;
+        }
+        
+        // Verificar captura em cadeia (CAPTURA MÚLTIPLA)
+        if(movimento && movimento.ehCaptura === true) {
+            const proxCapturas = obterCapturas(destinoL, destinoC);
+            if(proxCapturas.length > 0) {
+                return {cadeia: true, lin: destinoL, col: destinoC, capturas: proxCapturas};
+            }
+        }
+        return {cadeia: false};
+    }
+    
+    // Verificar fim de jogo
+    function verificarFimJogo() {
+        let brancas = 0, vermelhas = 0;
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                if(ehBranco(tabuleiro[i][j])) brancas++;
+                if(ehVermelho(tabuleiro[i][j])) vermelhas++;
+            }
+        }
+        
+        if(brancas === 0) {
+            fimJogo = true;
+            document.getElementById('message').innerText = '🏆 Vermelhas Venceram! 🏆';
+            return true;
+        }
+        if(vermelhas === 0) {
+            fimJogo = true;
+            document.getElementById('message').innerText = '🏆 Brancas Venceram! 🏆';
+            return true;
+        }
+        
+        // Verificar se o jogador atual tem movimentos
+        if(!jogadorTemMovimentos(jogadorAtual)) {
+            fimJogo = true;
+            const vencedor = jogadorAtual === 'branco' ? 'Vermelhas' : 'Brancas';
+            document.getElementById('message').innerText = `🏆 ${vencedor} Venceram! 🏆`;
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // Trocar jogador
+    function trocarJogador() {
+        jogadorAtual = jogadorAtual === 'branco' ? 'vermelho' : 'branco';
+        linhaSelecionada = -1;
+        colunaSelecionada = -1;
+        movimentosValidos = [];
+        
+        if(verificarFimJogo()) {
+            desenhar();
+            return;
+        }
+        
+        if(!fimJogo && modoJogo === 'ai' && jogadorAtual === 'vermelho' && !aguardandoIA) {
+            setTimeout(iaJogar, 200);
+        }
+        
+        desenhar();
+    }
+    
+    // Desenhar tabuleiro
+    function desenhar() {
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                const escura = (i + j) % 2 === 1;
+                ctx.fillStyle = escura ? '#b5884b' : '#f0d9b5';
+                ctx.fillRect(j * CELULA, i * CELULA, CELULA, CELULA);
+                
+                if(linhaSelecionada === i && colunaSelecionada === j) {
+                    ctx.fillStyle = 'rgba(255,255,100,0.5)';
+                    ctx.fillRect(j * CELULA, i * CELULA, CELULA, CELULA);
+                }
+                
+                for(const mv of movimentosValidos) {
+                    if(mv.paraLin === i && mv.paraCol === j) {
+                        ctx.fillStyle = 'rgba(0,255,0,0.3)';
+                        ctx.fillRect(j * CELULA, i * CELULA, CELULA, CELULA);
+                    }
+                }
+            }
+        }
+        
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                const p = tabuleiro[i][j];
+                if(p === 0) continue;
+                
+                const x = j * CELULA + CELULA/2;
+                const y = i * CELULA + CELULA/2;
+                const r = CELULA * 0.35;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                ctx.fillStyle = (p === 1 || p === 2) ? '#efe2c6' : '#c73b2a';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.stroke();
+                
+                if(ehDama(p)) {
+                    ctx.font = `bold ${CELULA * 0.35}px Arial`;
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillText("♔", x - 8, y + 6);
+                }
+            }
+        }
+        
+        const demo = document.getElementById('demoPiece');
+        const texto = document.getElementById('turnText');
+        demo.className = jogadorAtual === 'branco' ? 'piece-demo white' : 'piece-demo';
+        
+        if(!fimJogo) {
+            texto.innerText = `Vez das ${jogadorAtual === 'branco' ? 'Brancas' : 'Vermelhas'}`;
+            if(temCapturaObrigatoria(jogadorAtual)) {
+                document.getElementById('message').innerText = '⚠️ Captura obrigatória! ⚠️';
+            } else {
+                document.getElementById('message').innerText = '';
+            }
+        } else {
+            texto.innerText = 'Fim de Jogo!';
+        }
+    }
+    
+    // Clique no canvas
+    function aoClicar(e) {
+        if(fimJogo) return;
+        if(modoJogo === 'ai' && jogadorAtual !== 'branco') return;
+        if(aguardandoIA) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const escala = 400 / rect.width;
+        
+        let x, y;
+        if(e.touches) {
+            x = (e.touches[0].clientX - rect.left) * escala;
+            y = (e.touches[0].clientY - rect.top) * escala;
+            e.preventDefault();
+        } else {
+            x = (e.clientX - rect.left) * escala;
+            y = (e.clientY - rect.top) * escala;
+        }
+        
+        const col = Math.floor(x / CELULA);
+        const lin = Math.floor(y / CELULA);
+        if(lin < 0 || lin >= TAMANHO || col < 0 || col >= TAMANHO) return;
+        
+        // Nenhuma peça selecionada
+        if(linhaSelecionada === -1) {
+            const peca = tabuleiro[lin][col];
+            if(peca !== 0) {
+                const valido = (jogadorAtual === 'branco' && ehBranco(peca)) || (jogadorAtual === 'vermelho' && ehVermelho(peca));
+                if(valido) {
+                    const movimentos = obterMovimentosValidos(lin, col);
+                    if(movimentos.length > 0) {
+                        linhaSelecionada = lin;
+                        colunaSelecionada = col;
+                        movimentosValidos = movimentos;
+                        desenhar();
+                    }
+                }
+            }
+        } 
+        // Tentar mover
+        else {
+            const movimento = movimentosValidos.find(m => m.paraLin === lin && m.paraCol === col);
+            if(movimento) {
+                const resultado = aplicarMovimento(linhaSelecionada, colunaSelecionada, movimento.paraLin, movimento.paraCol, movimento);
+                linhaSelecionada = -1;
+                movimentosValidos = [];
+                desenhar();
+                
+                if(verificarFimJogo()) {
+                    desenhar();
+                    return;
+                }
+                
+                // CAPTURA MÚLTIPLA: Se tiver cadeia, continua com a mesma peça
+                if(resultado.cadeia) {
+                    linhaSelecionada = resultado.lin;
+                    colunaSelecionada = resultado.col;
+                    movimentosValidos = resultado.capturas;
+                    desenhar();
+                    document.getElementById('message').innerText = '🔁 Captura múltipla! Continue capturando! 🔁';
+                } else {
+                    trocarJogador();
+                }
+            } else {
+                linhaSelecionada = -1;
+                movimentosValidos = [];
+                desenhar();
+            }
+        }
+    }
+    
+    // IA
+    function iaJogar() {
+        if(fimJogo || jogadorAtual !== 'vermelho') return;
+        aguardandoIA = true;
+        
+        let opcoes = [];
+        for(let i = 0; i < TAMANHO; i++) {
+            for(let j = 0; j < TAMANHO; j++) {
+                const p = tabuleiro[i][j];
+                if(p !== 0 && ehVermelho(p)) {
+                    const movs = obterMovimentosValidos(i, j);
+                    if(movs.length > 0) {
+                        opcoes.push({lin: i, col: j, movimentos: movs});
+                    }
+                }
+            }
+        }
+        
+        if(opcoes.length === 0) {
+            aguardandoIA = false;
+            if(verificarFimJogo()) desenhar();
+            return;
+        }
+        
+        const aleatorio = Math.floor(Math.random() * opcoes.length);
+        const peca = opcoes[aleatorio];
+        const movimento = peca.movimentos[Math.floor(Math.random() * peca.movimentos.length)];
+        
+        const resultado = aplicarMovimento(peca.lin, peca.col, movimento.paraLin, movimento.paraCol, movimento);
+        desenhar();
+        
+        if(verificarFimJogo()) {
+            aguardandoIA = false;
+            desenhar();
+            return;
+        }
+        
+        if(resultado.cadeia) {
+            setTimeout(() => iaCadeia(resultado.lin, resultado.col, resultado.capturas), 100);
+        } else {
+            aguardandoIA = false;
+            trocarJogador();
+        }
+    }
+    
+    function iaCadeia(lin, col, capturas) {
+        if(capturas.length === 0 || fimJogo) {
+            aguardandoIA = false;
+            trocarJogador();
+            return;
+        }
+        
+        const aleatorio = Math.floor(Math.random() * capturas.length);
+        const captura = capturas[aleatorio];
+        const resultado = aplicarMovimento(lin, col, captura.paraLin, captura.paraCol, captura);
+        desenhar();
+        
+        if(verificarFimJogo()) {
+            aguardandoIA = false;
+            desenhar();
+            return;
+        }
+        
+        if(resultado.cadeia) {
+            setTimeout(() => iaCadeia(resultado.lin, resultado.col, resultado.capturas), 100);
+        } else {
+            aguardandoIA = false;
+            trocarJogador();
+        }
+    }
+    
+    function resetar() {
+        iniciarTabuleiro();
+        jogadorAtual = 'branco';
+        fimJogo = false;
+        linhaSelecionada = -1;
+        colunaSelecionada = -1;
+        movimentosValidos = [];
+        aguardandoIA = false;
+        document.getElementById('message').innerText = '';
+        desenhar();
+    }
+    
+    function mudarModo(modo) {
+        modoJogo = modo;
+        resetar();
+        document.getElementById('btn2p').classList.remove('active');
+        document.getElementById('btnAI').classList.remove('active');
+        if(modo === '2p') {
+            document.getElementById('
