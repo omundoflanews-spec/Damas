@@ -144,7 +144,7 @@
     function ehVermelho(p) { return p === 3 || p === 4; }
     function ehDama(p) { return p === 2 || p === 4; }
     
-    // Obter capturas (MODIFICADO: peças normais capturam para frente E para trás)
+    // Obter capturas
     function obterCapturas(lin, col) {
         const peca = tabuleiro[lin][col];
         if(peca === 0) return [];
@@ -173,7 +173,6 @@
                 }
             }
         } else {
-            // PEÇA NORMAL - Agora captura em TODAS as 4 direções (frente e trás)
             const dirs = [[-1,-1], [-1,1], [1,-1], [1,1]];
             for(const [dr, dc] of dirs) {
                 const meioL = lin + dr;
@@ -194,7 +193,7 @@
         return capturas;
     }
     
-    // Obter movimentos simples (sem captura) - Peças normais só andam para frente
+    // Obter movimentos simples (sem captura)
     function obterMovimentosSimples(lin, col) {
         const peca = tabuleiro[lin][col];
         if(peca === 0) return [];
@@ -214,7 +213,6 @@
                 }
             }
         } else {
-            // Peça normal só anda para frente
             const dirs = ehBranca ? [[-1,-1], [-1,1]] : [[1,-1], [1,1]];
             for(const [dr, dc] of dirs) {
                 const l = lin + dr;
@@ -274,23 +272,19 @@
     function aplicarMovimento(origemL, origemC, destinoL, destinoC, movimento) {
         const peca = tabuleiro[origemL][origemC];
         
-        // Move a peça
         tabuleiro[destinoL][destinoC] = peca;
         tabuleiro[origemL][origemC] = 0;
         
-        // Só remove peça capturada se for um movimento de captura
         if(movimento && movimento.ehCaptura === true) {
             tabuleiro[movimento.capturaLin][movimento.capturaCol] = 0;
         }
         
-        // Promoção a Dama
         if(peca === 1 && destinoL === 0) {
             tabuleiro[destinoL][destinoC] = 2;
         } else if(peca === 3 && destinoL === 7) {
             tabuleiro[destinoL][destinoC] = 4;
         }
         
-        // Verificar captura em cadeia (CAPTURA MÚLTIPLA)
         if(movimento && movimento.ehCaptura === true) {
             const proxCapturas = obterCapturas(destinoL, destinoC);
             if(proxCapturas.length > 0) {
@@ -321,7 +315,6 @@
             return true;
         }
         
-        // Verificar se o jogador atual tem movimentos
         if(!jogadorTemMovimentos(jogadorAtual)) {
             fimJogo = true;
             const vencedor = jogadorAtual === 'branco' ? 'Vermelhas' : 'Brancas';
@@ -436,7 +429,6 @@
         const lin = Math.floor(y / CELULA);
         if(lin < 0 || lin >= TAMANHO || col < 0 || col >= TAMANHO) return;
         
-        // Nenhuma peça selecionada
         if(linhaSelecionada === -1) {
             const peca = tabuleiro[lin][col];
             if(peca !== 0) {
@@ -451,9 +443,7 @@
                     }
                 }
             }
-        } 
-        // Tentar mover
-        else {
+        } else {
             const movimento = movimentosValidos.find(m => m.paraLin === lin && m.paraCol === col);
             if(movimento) {
                 const resultado = aplicarMovimento(linhaSelecionada, colunaSelecionada, movimento.paraLin, movimento.paraCol, movimento);
@@ -466,7 +456,6 @@
                     return;
                 }
                 
-                // CAPTURA MÚLTIPLA: Se tiver cadeia, continua com a mesma peça
                 if(resultado.cadeia) {
                     linhaSelecionada = resultado.lin;
                     colunaSelecionada = resultado.col;
@@ -573,4 +562,20 @@
         document.getElementById('btn2p').classList.remove('active');
         document.getElementById('btnAI').classList.remove('active');
         if(modo === '2p') {
-            document.getElementById('
+            document.getElementById('btn2p').classList.add('active');
+        } else {
+            document.getElementById('btnAI').classList.add('active');
+        }
+    }
+    
+    canvas.addEventListener('click', aoClicar);
+    canvas.addEventListener('touchstart', aoClicar);
+    document.getElementById('btnReset').addEventListener('click', resetar);
+    document.getElementById('btn2p').addEventListener('click', () => mudarModo('2p'));
+    document.getElementById('btnAI').addEventListener('click', () => mudarModo('ai'));
+    
+    iniciarTabuleiro();
+    desenhar();
+</script>
+</body>
+</html>
